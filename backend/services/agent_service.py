@@ -18,12 +18,6 @@ session_reasons: dict[str, list[str]] = {}
 
 
 def execute_tool(name: str, tool_input: dict, session_id: str) -> str:
-    """
-    Claude가 tool_use를 요청했을 때 실제로 실행하는 함수.
-    수업 Ch3/03_tool_use_loop.py의 execute_tool() 패턴과 동일.
-
-    반환값은 JSON 문자열 — Claude에게 tool_result로 다시 전달됨.
-    """
     if name == "save_reason":
         # 사용자가 말한 이유를 세션 저장소에 추가
         reason = tool_input["reason"]

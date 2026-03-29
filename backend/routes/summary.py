@@ -8,7 +8,7 @@ from services.agent_service import get_reasons_list
 
 router = APIRouter()
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-sonnet-4-5-20250929"
 
 
 async def stream_summary(session_id: str, user_id: str):
