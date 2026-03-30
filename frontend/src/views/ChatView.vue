@@ -1,104 +1,140 @@
 <template>
   <div class="chat-container">
     <header class="chat-header">
-      <h1>内音</h1>
-      <div class="step-indicator">
-        <span :class="['step', { active: step === 1, done: step > 1 }]">1 ためる</span>
-        <span class="divider">›</span>
-        <span :class="['step', { active: step === 2, done: step > 2 }]">2 きく</span>
-        <span class="divider">›</span>
-        <span :class="['step', { active: step === 3 }]">3 まとめる</span>
+      <div class="header-top">
+        <h1>内音</h1>
+        <div class="header-actions">
+          <button class="records-open-btn" @click="showRecords = true">기록</button>
+          <button class="dev-btn" @click="devSkipToSummary" title="테스트">🧪</button>
+        </div>
       </div>
-      <div class="header-actions">
-        <button class="records-open-btn" @click="showRecords = true">기록</button>
-        <button class="dev-btn" @click="devSkipToSummary" title="테스트: 이유 6개 주입 후 요약">🧪</button>
+      <div class="step-indicator">
+        <div :class="['step-item', { active: indicatorStep === 1, done: indicatorStep > 1 }]">
+          <span class="step-num">1</span>
+          <span class="step-label">ためる</span>
+        </div>
+        <div class="step-line" :class="{ done: indicatorStep > 1 }" />
+        <div :class="['step-item', { active: indicatorStep === 2, done: indicatorStep > 2 }]">
+          <span class="step-num">2</span>
+          <span class="step-label">きく</span>
+        </div>
+        <div class="step-line" :class="{ done: indicatorStep > 2 }" />
+        <div :class="['step-item', { active: indicatorStep === 3 }]">
+          <span class="step-num">3</span>
+          <span class="step-label">まとめる</span>
+        </div>
       </div>
     </header>
 
     <RecordsView v-if="showRecords" @close="showRecords = false" />
 
-    <!-- STEP 1: 자유롭게 쏟아내기 -->
-    <div v-if="step === 1" class="step1">
-      <p class="step1-desc">오늘 있었던 일과 느낀 감정을 자유롭게 적어보세요.<br>잘 쓰지 않아도 돼요. 생각나는 그대로.</p>
-      <textarea
-        v-model="freeInput"
-        placeholder="오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
-        rows="8"
-      />
-      <button class="start-btn" :disabled="!freeInput.trim()" @click="startChat">
-        질문 시작하기 →
-      </button>
-    </div>
+    <div class="page-wrapper">
+      <Transition :name="transitionName">
 
-    <!-- STEP 2: AI 대화 -->
-    <template v-if="step === 2">
-      <div class="messages" ref="messagesEl">
-        <div
-          v-for="(msg, i) in messages"
-          :key="i"
-          :class="['message', msg.role]"
-        >
-          <div
-            class="bubble"
-            v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
+        <!-- PAGE 1: 자유롭게 쏟아내기 -->
+        <div v-if="page === 'input'" key="input" class="page step1">
+          <p class="step1-desc">오늘 있었던 일과 느낀 감정을 자유롭게 적어보세요.<br>잘 쓰지 않아도 돼요. 생각나는 그대로.</p>
+          <textarea
+            v-model="freeInput"
+            placeholder="오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
+            rows="8"
           />
+          <button class="start-btn" :disabled="!freeInput.trim()" @click="goToPersona">다음</button>
         </div>
-        <div v-if="isLoading" class="message assistant">
-          <div class="bubble loading">...</div>
-        </div>
-      </div>
 
-      <div class="reason-counter">
-        <div class="dots">
-          <span
-            v-for="n in Math.max(5, reasonCount)"
-            :key="n"
-            :class="['dot', { filled: n <= reasonCount }]"
-          />
+        <!-- PAGE 1.5: 페르소나 선택 -->
+        <div v-else-if="page === 'persona'" key="persona" class="page step-persona">
+          <div class="persona-page-inner">
+            <p class="persona-page-title">어떤 방식으로 이야기할까요?</p>
+            <p class="persona-page-sub">코치 스타일을 선택하면 바로 시작해요.</p>
+            <div class="persona-cards-full">
+              <button
+                v-for="p in personaOptions"
+                :key="p.id"
+                :class="['persona-card-full', { selected: selectedPersona === p.id }]"
+                @click="selectedPersona = p.id"
+              >
+                <span class="persona-icon">{{ p.icon }}</span>
+                <div class="persona-text">
+                  <span class="persona-name">{{ p.name }}</span>
+                  <span class="persona-desc">{{ p.description }}</span>
+                  <span class="persona-example">{{ p.example }}</span>
+                </div>
+              </button>
+            </div>
+            <div class="persona-actions">
+              <button class="back-btn" @click="goBack">돌아가기</button>
+              <button class="start-btn" @click="startChat">질문 시작하기</button>
+            </div>
+          </div>
         </div>
-        <span class="count-label">
-          이유 {{ reasonCount }}개 {{ reasonCount >= 5 ? '✓' : `(${5 - reasonCount}개 더)` }}
-        </span>
-        <button
-          class="summary-btn"
-          :disabled="reasonCount < 5 || isSummarizing"
-          @click="handleSummary"
-        >
-          {{ isSummarizing ? "분석 중..." : "요약하기" }}
-        </button>
-      </div>
 
-      <div class="input-area">
-        <textarea
-          v-model="input"
-          placeholder="생각나는 대로 말해보세요  (Shift+Enter 줄바꿈)"
-          rows="1"
-          ref="inputEl"
-          @keydown.enter.exact.prevent="sendMessage"
-          @keydown.shift.enter.prevent="input += '\n'"
-          :disabled="isLoading"
-        />
-        <button @click="sendMessage" :disabled="isLoading || !input.trim()">전송</button>
-      </div>
-    </template>
+        <!-- PAGE 2: AI 대화 -->
+        <div v-else-if="page === 'chat'" key="chat" class="page chat-page">
+          <div class="messages" ref="messagesEl">
+            <div v-for="(msg, i) in messages" :key="i" :class="['message', msg.role]">
+              <div
+                class="bubble"
+                v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
+              />
+            </div>
+            <div v-if="isLoading" class="message assistant">
+              <div class="bubble loading">...</div>
+            </div>
+          </div>
 
-    <!-- STEP 3: 결론 -->
-    <div v-if="step === 3" class="step3">
-      <div class="note-card">
-        <div class="note-date">{{ today }}</div>
-        <div class="note-lines">
-          <div
-            v-for="(line, i) in conclusionLines"
-            :key="i"
-            class="note-line"
-          >{{ line }}</div>
+          <div class="bottom-bar">
+            <div class="reason-dots">
+              <span v-for="n in Math.max(5, reasonCount)" :key="n" :class="['dot', { filled: n <= reasonCount }]" />
+              <span class="dot-label">이유 {{ reasonCount }}개</span>
+            </div>
+            <button
+              class="summary-btn"
+              :disabled="reasonCount === 0 || isSummarizing"
+              @click="handleSummary"
+            >{{ isSummarizing ? "분석 중..." : "요약하기" }}</button>
+          </div>
+
+          <div class="input-area">
+            <textarea
+              v-model="input"
+              placeholder="생각나는 대로 말해보세요  (Shift+Enter 줄바꿈)"
+              rows="1"
+              ref="inputEl"
+              @keydown.enter.exact.prevent="sendMessage"
+              @keydown.shift.enter.prevent="input += '\n'"
+              :disabled="isLoading"
+            />
+            <button @click="sendMessage" :disabled="isLoading || !input.trim()">전송</button>
+          </div>
         </div>
-        <div class="note-footer">内音</div>
-      </div>
-      <div class="step3-actions">
-        <button class="back-btn" @click="step = 2">← 대화로 돌아가기</button>
-        <button class="restart-btn" @click="restart">새로 시작하기</button>
-      </div>
+
+        <!-- PAGE 3: まとめる -->
+        <div v-else-if="page === 'summary'" key="summary" class="page step3">
+          <div class="note-card">
+            <div class="note-date">{{ today }}</div>
+            <p class="note-context-text">{{ context }}</p>
+            <div class="note-reasons-list">
+              <div
+                v-for="(r, i) in (reasonsHighlighted.length ? reasonsHighlighted : reasons)"
+                :key="i"
+                class="note-reason-row"
+              >
+                <span class="note-star">*</span>
+                <span v-html="r" />
+              </div>
+            </div>
+            <div class="note-divider" />
+            <p class="note-conclusion">{{ conclusion }}</p>
+            <div class="note-footer">内音</div>
+          </div>
+          <div class="step3-actions">
+            <button class="back-btn" @click="goBack">대화로 돌아가기</button>
+            <button class="restart-btn" @click="restart">새로 시작하기</button>
+          </div>
+        </div>
+
+      </Transition>
     </div>
   </div>
 </template>
@@ -122,8 +158,8 @@ const personaOptions = [
 type Page = 'input' | 'persona' | 'chat' | 'summary'
 const pageOrder: Page[] = ['input', 'persona', 'chat', 'summary']
 
-const page          = ref<Page>('input')
-const direction     = ref<'forward' | 'backward'>('forward')
+const page           = ref<Page>('input')
+const direction      = ref<'forward' | 'backward'>('forward')
 const transitionName = computed(() => `slide-${direction.value}`)
 const indicatorStep  = computed(() => {
   if (page.value === 'input' || page.value === 'persona') return 1
@@ -131,20 +167,20 @@ const indicatorStep  = computed(() => {
   return 3
 })
 
-const freeInput       = ref("")
-const input           = ref("")
-const selectedPersona = ref("warm")
-const isLoading       = ref(false)
-const isSummarizing   = ref(false)
-const reasonCount          = ref(0)
-const reasons              = ref<string[]>([])
-const conclusion           = ref("")
-const reasonsHighlighted   = ref<string[]>([])
-const messagesEl      = ref<HTMLElement>()
-const inputEl         = ref<HTMLTextAreaElement>()
-const context         = ref("")
-const showRecords     = ref(false)
-const messages        = ref<{ role: "user" | "assistant"; content: string }[]>([])
+const freeInput          = ref("")
+const input              = ref("")
+const selectedPersona    = ref("warm")
+const isLoading          = ref(false)
+const isSummarizing      = ref(false)
+const reasonCount        = ref(0)
+const reasons            = ref<string[]>([])
+const conclusion         = ref("")
+const reasonsHighlighted = ref<string[]>([])
+const messagesEl         = ref<HTMLElement>()
+const inputEl            = ref<HTMLTextAreaElement>()
+const context            = ref("")
+const showRecords        = ref(false)
+const messages           = ref<{ role: "user" | "assistant"; content: string }[]>([])
 
 function navigate(to: Page) {
   direction.value = pageOrder.indexOf(to) >= pageOrder.indexOf(page.value) ? 'forward' : 'backward'
@@ -161,7 +197,6 @@ function goToPersona() {
 }
 function renderMarkdown(text: string) { return marked.parse(text) as string }
 
-
 const today = computed(() => {
   const d = new Date()
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`
@@ -173,21 +208,15 @@ async function scrollToBottom() {
 }
 
 async function startChat() {
-  if (!freeInput.value.trim()) return
-  context.value = freeInput.value.trim()
-  step.value = 2
-
-  // STEP 1 내용을 컨텍스트로 넘기며 첫 메시지 전송
-  const firstMessage = "방금 적은 내용을 바탕으로 질문해줘"
+  navigate('chat')
   isLoading.value = true
   const assistantMsg = { role: "assistant" as const, content: "" }
   messages.value.push(assistantMsg)
   await scrollToBottom()
   try {
     for await (const chunk of streamChat(
-      firstMessage,
-      SESSION_ID,
-      USER_ID,
+      "방금 적은 내용을 바탕으로 질문해줘",
+      SESSION_ID, USER_ID,
       (count) => { reasonCount.value = count },
       context.value, selectedPersona.value,
       (reason) => { reasons.value.push(reason) }
@@ -206,14 +235,11 @@ async function sendMessage() {
   await scrollToBottom()
   try {
     for await (const chunk of streamChat(
-      userMsg,
-      SESSION_ID,
-      USER_ID,
-      (count) => { reasonCount.value = count }
-    )) {
-      assistantMsg.content += chunk
-      await scrollToBottom()
-    }
+      userMsg, SESSION_ID, USER_ID,
+      (count) => { reasonCount.value = count },
+      undefined, selectedPersona.value,
+      (reason) => { reasons.value.push(reason) }
+    )) { assistantMsg.content += chunk; await scrollToBottom() }
   } finally {
     isLoading.value = false
     await nextTick()
@@ -226,14 +252,12 @@ async function handleSummary() {
   conclusion.value = ""
   reasonsHighlighted.value = []
   try {
-    for await (const chunk of streamSummary(SESSION_ID, USER_ID)) {
-      conclusion.value += chunk
-    }
-    saveRecord(conclusion.value)
-    step.value = 3
-  } finally {
-    isSummarizing.value = false
-  }
+    const result = await fetchSummary(SESSION_ID, USER_ID)
+    conclusion.value = result.conclusion
+    reasonsHighlighted.value = result.reasons_highlighted
+    saveRecord(result.conclusion)
+    navigate('summary')
+  } finally { isSummarizing.value = false }
 }
 
 async function devSkipToSummary() {
@@ -248,11 +272,6 @@ async function devSkipToSummary() {
     { role: "assistant", content: "이유들이 쌓였어요. 요약하기 버튼을 눌러보세요." },
   ]
   navigate('chat')
-}
-
-function goHome() {
-  if (step.value === 1) return
-  restart()
 }
 
 function restart() {
@@ -275,12 +294,12 @@ function restart() {
   font-size: 15px;
 }
 
-/* ── Header ── */
+/* ── 헤더 ── */
 .chat-header {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px 0 18px;
+  padding: 20px 0 16px;
   border-bottom: 1px solid #e8e0d8;
   flex-shrink: 0;
 }
@@ -289,70 +308,11 @@ function restart() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 0;
-  border-bottom: 1px solid #e8e0d8;
 }
 
-.chat-header h1 {
-  font-size: 19px;
-  font-weight: 600;
-  color: #2c1f14;
-  letter-spacing: 0.02em;
-}
+.chat-header h1 { font-size: 22px; font-weight: 700; color: #2c1f14; letter-spacing: 0.02em; }
 
-.step-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-}
-.step-line.done { background: #b8a898; }
-
-.step-num {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.records-open-btn {
-  background: none;
-  border: 1px solid #e0d6cc;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: #b0a090;
-  letter-spacing: 0.02em;
-  transition: all 0.3s;
-}
-
-.step-item.active .step-num {
-  background: #6b4c2a;
-  color: #fffdf9;
-}
-.step-item.active .step-label { color: #6b4c2a; font-weight: 600; }
-
-.step-item.done .step-num { background: #c8a878; color: #fffdf9; }
-.step-item.done .step-label { color: #a89080; }
-
-.step-line {
-  flex: 1;
-  height: 1px;
-  background: #e0d6cc;
-  margin: 0 10px;
-  min-width: 32px;
-  transition: background 0.3s;
-}
-.step-line.done { background: #c8a878; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
 
 .records-open-btn {
   background: none; border: 1px solid #e0d6cc; border-radius: 6px;
@@ -361,94 +321,97 @@ function restart() {
 .records-open-btn:hover { background: #f0e8e0; color: #6b4c2a; }
 
 .dev-btn {
-  background: none;
-  border: 1px dashed #ddd4cc;
-  border-radius: 6px;
-  padding: 3px 7px;
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.2s;
+  background: none; border: 1px dashed #ddd4cc; border-radius: 6px;
+  padding: 3px 7px; font-size: 14px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s;
 }
 .dev-btn:hover { opacity: 1; }
 
-.step { color: #c8bdb5; }
-.step.active { color: #6b4c2a; font-weight: 600; }
-.step.done { color: #a89080; }
-.divider { color: #ddd4cc; }
+/* 스텝 인디케이터 */
+.step-indicator { display: flex; align-items: center; }
+
+.step-item { display: flex; align-items: center; gap: 6px; }
+
+.step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  background: #ede8e2; color: #b0a090;
+  transition: all 0.3s;
+}
+
+.step-label { font-size: 12px; color: #b0a090; letter-spacing: 0.02em; transition: all 0.3s; }
+
+.step-item.active .step-num { background: #6b4c2a; color: #fffdf9; }
+.step-item.active .step-label { color: #6b4c2a; font-weight: 600; }
+.step-item.done .step-num { background: #c8a878; color: #fffdf9; }
+.step-item.done .step-label { color: #a89080; }
+
+.step-line {
+  flex: 1; height: 1px; background: #e0d6cc;
+  margin: 0 10px; min-width: 32px; transition: background 0.3s;
+}
+.step-line.done { background: #c8a878; }
+
+/* ── 페이지 전환 ── */
+.page-wrapper { flex: 1; position: relative; overflow: hidden; }
+.page { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+.slide-forward-enter-active, .slide-forward-leave-active,
+.slide-backward-enter-active, .slide-backward-leave-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+.slide-forward-enter-from  { transform: translateX(40px); opacity: 0; }
+.slide-forward-leave-to    { transform: translateX(-40px); opacity: 0; }
+.slide-backward-enter-from { transform: translateX(-40px); opacity: 0; }
+.slide-backward-leave-to   { transform: translateX(40px); opacity: 0; }
 
 /* ── STEP 1 ── */
-.step1 {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 18px;
-  padding: 40px 0;
-}
+.step1 { justify-content: flex-start; gap: 20px; padding: 36px 0 32px; }
 
-.step1-desc {
-  font-size: 15px;
-  color: #7a6555;
-  line-height: 1.8;
-}
+.step1-desc { font-size: 15px; color: #7a6555; line-height: 1.9; }
 
 .step1 textarea {
-  width: 100%;
-  padding: 18px;
-  border: 1px solid #e0d6cc;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.8;
-  resize: none;
-  outline: none;
-  background: #fffdf9;
-  color: #2c1f14;
-  font-family: inherit;
+  width: 100%; padding: 18px; border: 1px solid #e0d6cc; border-radius: 14px;
+  font-size: 15px; line-height: 1.8; resize: none; outline: none;
+  background: #fffdf9; color: #2c1f14; font-family: inherit;
   box-shadow: 0 1px 4px rgba(107,76,42,0.06);
 }
+.step1 textarea:focus { border-color: #a07850; box-shadow: 0 0 0 3px rgba(160,120,80,0.08); }
 
-.step1 textarea:focus {
-  border-color: #a07850;
-  box-shadow: 0 0 0 3px rgba(160,120,80,0.08);
+/* ── STEP 1.5 ── */
+.step-persona { justify-content: center; }
+.persona-page-inner { display: flex; flex-direction: column; gap: 20px; padding: 40px 0; }
+.persona-page-title { font-size: 20px; font-weight: 600; color: #2c1f14; }
+.persona-page-sub { font-size: 13px; color: #a89080; margin-top: -12px; }
+.persona-cards-full { display: flex; flex-direction: column; gap: 10px; }
+
+.persona-card-full {
+  display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px;
+  border: 1.5px solid #e0d6cc; border-radius: 14px; background: #fffdf9;
+  cursor: pointer; text-align: left; transition: all 0.18s;
 }
+.persona-card-full:hover { border-color: #a07850; background: #fdf8f3; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(107,76,42,0.08); }
+.persona-card-full.selected { border-color: #6b4c2a; background: #f5ede4; }
 
-.start-btn {
-  align-self: flex-end;
-  padding: 12px 26px;
-  background: #6b4c2a;
-  color: #fffdf9;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
+.persona-icon { font-size: 26px; flex-shrink: 0; margin-top: 2px; }
+.persona-text { display: flex; flex-direction: column; gap: 4px; }
+.persona-name { font-size: 15px; font-weight: 600; color: #2c1f14; }
+.persona-desc { font-size: 13px; color: #7a6555; }
+.persona-example { font-size: 12px; color: #b0a090; font-style: italic; margin-top: 2px; }
+.persona-actions { display: flex; justify-content: space-between; align-items: center; }
 
-.start-btn:hover { background: #5a3e22; }
-.start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+/* ── STEP 2: 채팅 ── */
+.chat-page { gap: 0; }
 
-/* ── STEP 2 ── */
 .messages {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px 0;
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 20px 0;
 }
 
-.message         { display: flex; justify-content: flex-start; }
-.message.user    { justify-content: flex-end; }
+.message { display: flex; justify-content: flex-start; }
+.message.user { justify-content: flex-end; }
 
-.bubble {
-  max-width: 75%;
-  padding: 12px 16px;
-  font-size: 15px;
-  line-height: 1.7;
-}
-
+.bubble { max-width: 75%; padding: 12px 16px; font-size: 15px; line-height: 1.7; }
 .bubble :deep(p) { margin: 0 0 6px 0; }
 .bubble :deep(p:last-child) { margin-bottom: 0; }
 
@@ -462,187 +425,90 @@ function restart() {
 }
 
 .loading { color: #c8b8a8; animation: pulse 1.2s infinite; }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .bottom-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-top: 1px solid #e8e0d8;
-  flex-shrink: 0;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-top: 1px solid #e8e0d8;
 }
 
-.dots { display: flex; gap: 5px; }
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ddd4cc;
-  transition: background 0.3s;
-}
-
+.reason-dots { display: flex; align-items: center; gap: 5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #ddd4cc; transition: background 0.3s; }
 .dot.filled { background: #6b4c2a; }
-
-.count-label { font-size: 12px; color: #a89080; flex: 1; }
+.dot-label { font-size: 12px; color: #a89080; margin-left: 4px; }
 
 .summary-btn {
   padding: 6px 16px; background: transparent; color: #a89080;
-  border: 1px solid #e0d6cc; border-radius: 8px; font-size: 13px;
-  cursor: pointer; transition: all 0.2s;
+  border: 1px solid #e0d6cc; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.2s;
 }
-
-.summary-btn:hover { background: #5a3e22; }
+.summary-btn:hover:not(:disabled) { background: #f0e8e0; color: #6b4c2a; }
 .summary-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-.input-area {
-  display: flex;
-  gap: 8px;
-  padding: 10px 0 22px;
-}
+.input-area { display: flex; gap: 8px; padding: 8px 0 20px; flex-shrink: 0; }
 .input-area textarea {
-  flex: 1;
-  padding: 12px 16px;
-  border: 1px solid #e0d6cc;
-  border-radius: 12px;
-  font-size: 14px;
-  outline: none;
-  background: #fffdf9;
-  color: #2c1f14;
-  font-family: inherit;
-  resize: none;
-  line-height: 1.6;
+  flex: 1; padding: 12px 16px; border: 1px solid #e0d6cc; border-radius: 12px;
+  font-size: 15px; outline: none; background: #fffdf9; color: #2c1f14;
+  font-family: inherit; resize: none; line-height: 1.6;
 }
-
-.input-area textarea:focus {
-  border-color: #a07850;
-  box-shadow: 0 0 0 3px rgba(160,120,80,0.08);
-}
-
+.input-area textarea:focus { border-color: #a07850; box-shadow: 0 0 0 3px rgba(160,120,80,0.08); }
 .input-area button {
   padding: 12px 20px; background: #6b4c2a; color: #fffdf9; border: none;
   border-radius: 12px; font-size: 15px; cursor: pointer; align-self: flex-end; transition: background 0.2s;
 }
-
 .input-area button:hover { background: #5a3e22; }
 .input-area button:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* ── STEP 3 ── */
+/* ── STEP 3: まとめる ── */
 .step3 {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 28px;
-  padding: 40px 0;
+  overflow-y: auto; padding: 40px 0 60px;
+  gap: 24px; align-items: center; justify-content: flex-start;
 }
 
 .note-card {
-  width: 100%;
-  max-width: 420px;
-  background: #fffef5;
-  border-radius: 4px;
-  padding: 36px 40px 40px;
-  box-shadow:
-    0 2px 4px rgba(107,76,42,0.08),
-    0 8px 24px rgba(107,76,42,0.10),
-    4px 4px 0 #e8ddd0;
-  position: relative;
-  /* 노트 줄 배경 */
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent,
-    transparent 31px,
-    #ede8e0 31px,
-    #ede8e0 32px
-  );
-  background-position: 0 52px;
+  width: 100%; max-width: 520px; background: #fffef5; border-radius: 4px;
+  padding: 32px 36px 40px 40px;
+  box-shadow: 0 2px 8px rgba(107,76,42,0.08), 0 12px 32px rgba(107,76,42,0.10);
+  border-left: 3px solid #d4a97a;
 }
 
-.note-date {
-  font-size: 11px; color: #b0a090; letter-spacing: 0.08em;
-  margin-bottom: 20px; font-family: 'Courier New', monospace;
-}
+.note-date { font-size: 11px; color: #b0a090; letter-spacing: 0.08em; margin-bottom: 20px; font-family: 'Courier New', monospace; }
 
-.note-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+.note-context-text { font-size: 15px; color: #2c1f14; line-height: 1.8; margin: 0 0 16px; word-break: keep-all; }
 
-.note-reason-row {
-  display: flex; gap: 8px;
-  font-size: 14px; color: #5a4030; line-height: 1.6;
-}
+.note-reasons-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+
+.note-reason-row { display: flex; gap: 8px; font-size: 14px; color: #5a4030; line-height: 1.6; }
 .note-star { color: #c8a878; flex-shrink: 0; }
 
 .note-reason-row :deep(mark) {
-  background: none;
-  font-weight: 700;
-  color: #6b4c2a;
-  border-bottom: 2px solid #c8a878;
+  background: none; font-weight: 700; color: #6b4c2a; border-bottom: 2px solid #c8a878;
 }
 
-.note-divider {
-  height: 1px;
-  background: linear-gradient(to right, #d4a97a, transparent);
-  margin: 4px 0 20px;
-}
+.note-divider { height: 1px; background: linear-gradient(to right, #d4a97a, transparent); margin: 4px 0 20px; }
 
-.note-conclusion {
-  font-size: 15px; color: #2c1f14; line-height: 1.8;
-  margin: 0; word-break: keep-all;
-}
+.note-conclusion { font-size: 15px; color: #2c1f14; line-height: 1.8; margin: 0; word-break: keep-all; }
 
-.note-footer {
-  margin-top: 28px;
-  font-size: 11px;
-  color: #c8b8a8;
-  text-align: right;
-  letter-spacing: 0.1em;
-}
+.note-footer { margin-top: 28px; font-size: 11px; color: #c8b8a8; text-align: right; letter-spacing: 0.1em; }
 
-.step3-actions {
-  display: flex;
-  gap: 10px;
+.step3-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+/* ── 공통 버튼 ── */
+.start-btn {
+  padding: 12px 28px; background: #6b4c2a; color: #fffdf9; border: none;
+  border-radius: 10px; font-size: 15px; cursor: pointer; transition: background 0.2s; align-self: flex-end;
 }
+.start-btn:hover { background: #5a3e22; }
+.start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .back-btn {
-  padding: 10px 22px;
-  background: transparent;
-  color: #a89080;
-  border: 1px solid #e0d6cc;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 10px 22px; background: transparent; color: #a89080;
+  border: 1px solid #e0d6cc; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.2s;
 }
-
-.back-btn:hover {
-  background: #f0e8e0;
-  color: #6b4c2a;
-}
+.back-btn:hover { background: #f0e8e0; color: #6b4c2a; }
 
 .restart-btn {
-  padding: 10px 22px;
-  background: transparent;
-  color: #a89080;
-  border: 1px solid #e0d6cc;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 10px 22px; background: transparent; color: #a89080;
+  border: 1px solid #e0d6cc; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.2s;
 }
-
-.restart-btn:hover {
-  background: #f0e8e0;
-  color: #6b4c2a;
-}
+.restart-btn:hover { background: #f0e8e0; color: #6b4c2a; }
 </style>
