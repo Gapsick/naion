@@ -5,7 +5,8 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str
     user_id: str
-    context: Optional[str] = None  # STEP 1에서 자유롭게 입력한 내용
+    context: Optional[str] = None
+    persona: Optional[str] = "warm"
 
 class SummaryRequest(BaseModel):
     session_id: str

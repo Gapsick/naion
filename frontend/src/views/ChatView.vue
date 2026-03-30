@@ -1,13 +1,13 @@
 <template>
   <div class="chat-container">
     <header class="chat-header">
-      <h1 class="logo" @click="goHome">内音</h1>
+      <h1>内音</h1>
       <div class="step-indicator">
-        <span :class="['step-dot', { active: step === 1, done: step > 1 }]">1</span>
-        <span class="step-line" :class="{ done: step > 1 }"></span>
-        <span :class="['step-dot', { active: step === 2, done: step > 2 }]">2</span>
-        <span class="step-line" :class="{ done: step > 2 }"></span>
-        <span :class="['step-dot', { active: step === 3 }]">3</span>
+        <span :class="['step', { active: step === 1, done: step > 1 }]">1 ためる</span>
+        <span class="divider">›</span>
+        <span :class="['step', { active: step === 2, done: step > 2 }]">2 きく</span>
+        <span class="divider">›</span>
+        <span :class="['step', { active: step === 3 }]">3 まとめる</span>
       </div>
       <div class="header-actions">
         <button class="records-open-btn" @click="showRecords = true">기록</button>
@@ -17,87 +17,88 @@
 
     <RecordsView v-if="showRecords" @close="showRecords = false" />
 
-    <div class="step-wrapper">
-      <Transition name="step" mode="out-in">
+    <!-- STEP 1: 자유롭게 쏟아내기 -->
+    <div v-if="step === 1" class="step1">
+      <p class="step1-desc">오늘 있었던 일과 느낀 감정을 자유롭게 적어보세요.<br>잘 쓰지 않아도 돼요. 생각나는 그대로.</p>
+      <textarea
+        v-model="freeInput"
+        placeholder="오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
+        rows="8"
+      />
+      <button class="start-btn" :disabled="!freeInput.trim()" @click="startChat">
+        질문 시작하기 →
+      </button>
+    </div>
 
-        <!-- STEP 1 -->
-        <div v-if="step === 1" key="1" class="step1">
-          <div class="journal-date">{{ today }}</div>
-          <p class="step1-desc">오늘 있었던 일과 느낀 감정을<br>자유롭게 적어보세요.</p>
-          <textarea
-            v-model="freeInput"
-            class="journal-textarea"
-            placeholder="오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
+    <!-- STEP 2: AI 대화 -->
+    <template v-if="step === 2">
+      <div class="messages" ref="messagesEl">
+        <div
+          v-for="(msg, i) in messages"
+          :key="i"
+          :class="['message', msg.role]"
+        >
+          <div
+            class="bubble"
+            v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
           />
-          <button class="start-btn" :disabled="!freeInput.trim()" @click="startChat">
-            질문 시작하기
-          </button>
         </div>
-
-        <!-- STEP 2 -->
-        <div v-else-if="step === 2" key="2" class="step2">
-          <div class="messages" ref="messagesEl">
-            <div v-for="(msg, i) in messages" :key="i" :class="['message', msg.role]">
-              <div
-                class="bubble"
-                v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
-              />
-            </div>
-            <div v-if="isLoading" class="message assistant">
-              <div class="bubble loading">...</div>
-            </div>
-          </div>
-
-          <div class="reason-counter">
-            <div class="dots">
-              <span
-                v-for="n in Math.max(5, reasonCount)"
-                :key="n"
-                :class="['dot', { filled: n <= reasonCount }]"
-              />
-            </div>
-            <span class="count-label">
-              이유 {{ reasonCount }}개 {{ reasonCount >= 5 ? '✓' : `(${5 - reasonCount}개 더)` }}
-            </span>
-            <button
-              class="summary-btn"
-              :disabled="reasonCount < 5 || isSummarizing"
-              @click="handleSummary"
-            >
-              {{ isSummarizing ? "분석 중..." : "요약하기" }}
-            </button>
-          </div>
-
-          <div class="input-area">
-            <textarea
-              v-model="input"
-              placeholder="생각나는 대로 말해보세요"
-              rows="1"
-              ref="inputEl"
-              @keydown.enter.exact.prevent="sendMessage"
-              @keydown.shift.enter.prevent="input += '\n'"
-              :disabled="isLoading"
-            />
-            <button @click="sendMessage" :disabled="isLoading || !input.trim()">전송</button>
-          </div>
+        <div v-if="isLoading" class="message assistant">
+          <div class="bubble loading">...</div>
         </div>
+      </div>
 
-        <!-- STEP 3 -->
-        <div v-else-if="step === 3" key="3" class="step3">
-          <div class="note-card">
-            <div class="note-date">{{ today }}</div>
-            <div class="note-lines">
-              <div v-for="(line, i) in conclusionLines" :key="i" class="note-line">{{ line }}</div>
-            </div>
-            <div class="note-footer">内音</div>
-          </div>
-          <div class="step3-actions">
-            <button class="back-btn" @click="step = 2">대화로 돌아가기</button>
-            <button class="restart-btn" @click="restart">새로 시작하기</button>
-          </div>
+      <div class="reason-counter">
+        <div class="dots">
+          <span
+            v-for="n in Math.max(5, reasonCount)"
+            :key="n"
+            :class="['dot', { filled: n <= reasonCount }]"
+          />
         </div>
+        <span class="count-label">
+          이유 {{ reasonCount }}개 {{ reasonCount >= 5 ? '✓' : `(${5 - reasonCount}개 더)` }}
+        </span>
+        <button
+          class="summary-btn"
+          :disabled="reasonCount < 5 || isSummarizing"
+          @click="handleSummary"
+        >
+          {{ isSummarizing ? "분석 중..." : "요약하기" }}
+        </button>
+      </div>
 
-      </Transition>
+      <div class="input-area">
+        <textarea
+          v-model="input"
+          placeholder="생각나는 대로 말해보세요  (Shift+Enter 줄바꿈)"
+          rows="1"
+          ref="inputEl"
+          @keydown.enter.exact.prevent="sendMessage"
+          @keydown.shift.enter.prevent="input += '\n'"
+          :disabled="isLoading"
+        />
+        <button @click="sendMessage" :disabled="isLoading || !input.trim()">전송</button>
+      </div>
+    </template>
+
+    <!-- STEP 3: 결론 -->
+    <div v-if="step === 3" class="step3">
+      <div class="note-card">
+        <div class="note-date">{{ today }}</div>
+        <div class="note-lines">
+          <div
+            v-for="(line, i) in conclusionLines"
+            :key="i"
+            class="note-line"
+          >{{ line }}</div>
+        </div>
+        <div class="note-footer">内音</div>
+      </div>
+      <div class="step3-actions">
+        <button class="back-btn" @click="step = 2">← 대화로 돌아가기</button>
+        <button class="restart-btn" @click="restart">새로 시작하기</button>
+      </div>
     </div>
   </div>
 </template>
@@ -105,48 +106,70 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from "vue"
 import { marked } from "marked"
-import { streamChat, streamSummary, seedTestSession } from "../api/chat"
+import { streamChat, fetchSummary, seedTestSession } from "../api/chat"
 import { saveRecord } from "../utils/records"
 import RecordsView from "./RecordsView.vue"
 
 const SESSION_ID = "session-" + Date.now()
 const USER_ID = "demo-user"
 
-const step = ref<1 | 2 | 3>(1)
-const freeInput = ref("")
-const input = ref("")
-const isLoading = ref(false)
-const isSummarizing = ref(false)
-const reasonCount = ref(0)
-const conclusion = ref("")
-const messagesEl = ref<HTMLElement>()
-const inputEl = ref<HTMLTextAreaElement>()
-const context = ref("")
-const showRecords = ref(false)
+const personaOptions = [
+  { id: "warm",    icon: "🌿", name: "따뜻한 코치",     description: "공감하며 부드럽게 이끌어요",       example: "\"많이 힘드셨겠어요. 왜 그런지 말해줄 수 있어요?\"" },
+  { id: "factual", icon: "🔍", name: "분석적 코치",     description: "사실과 원인 중심으로 파고들어요",   example: "\"어떤 상황에서 그렇게 느꼈나요?\"" },
+  { id: "coach",   icon: "💬", name: "소크라테스 코치", description: "질문으로만 스스로 답을 찾게 해요", example: "\"그 순간 무엇을 원하고 있었나요?\"" },
+]
 
-const messages = ref<{ role: "user" | "assistant"; content: string }[]>([])
+type Page = 'input' | 'persona' | 'chat' | 'summary'
+const pageOrder: Page[] = ['input', 'persona', 'chat', 'summary']
 
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string
+const page          = ref<Page>('input')
+const direction     = ref<'forward' | 'backward'>('forward')
+const transitionName = computed(() => `slide-${direction.value}`)
+const indicatorStep  = computed(() => {
+  if (page.value === 'input' || page.value === 'persona') return 1
+  if (page.value === 'chat') return 2
+  return 3
+})
+
+const freeInput       = ref("")
+const input           = ref("")
+const selectedPersona = ref("warm")
+const isLoading       = ref(false)
+const isSummarizing   = ref(false)
+const reasonCount          = ref(0)
+const reasons              = ref<string[]>([])
+const conclusion           = ref("")
+const reasonsHighlighted   = ref<string[]>([])
+const messagesEl      = ref<HTMLElement>()
+const inputEl         = ref<HTMLTextAreaElement>()
+const context         = ref("")
+const showRecords     = ref(false)
+const messages        = ref<{ role: "user" | "assistant"; content: string }[]>([])
+
+function navigate(to: Page) {
+  direction.value = pageOrder.indexOf(to) >= pageOrder.indexOf(page.value) ? 'forward' : 'backward'
+  page.value = to
 }
+function goBack() {
+  if (page.value === 'persona') navigate('input')
+  else if (page.value === 'summary') navigate('chat')
+}
+function goToPersona() {
+  if (!freeInput.value.trim()) return
+  context.value = freeInput.value.trim()
+  navigate('persona')
+}
+function renderMarkdown(text: string) { return marked.parse(text) as string }
+
 
 const today = computed(() => {
   const d = new Date()
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`
 })
 
-const conclusionLines = computed(() =>
-  conclusion.value
-    .split('\n')
-    .map(l => l.replace(/^#+\s*/, '').trim())
-    .filter(l => l.length > 0)
-)
-
 async function scrollToBottom() {
   await nextTick()
-  if (messagesEl.value) {
-    messagesEl.value.scrollTop = messagesEl.value.scrollHeight
-  }
+  if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
 }
 
 async function startChat() {
@@ -154,41 +177,38 @@ async function startChat() {
   context.value = freeInput.value.trim()
   step.value = 2
 
+  // STEP 1 내용을 컨텍스트로 넘기며 첫 메시지 전송
   const firstMessage = "방금 적은 내용을 바탕으로 질문해줘"
   isLoading.value = true
   const assistantMsg = { role: "assistant" as const, content: "" }
   messages.value.push(assistantMsg)
   await scrollToBottom()
-
   try {
     for await (const chunk of streamChat(
-      firstMessage, SESSION_ID, USER_ID,
+      firstMessage,
+      SESSION_ID,
+      USER_ID,
       (count) => { reasonCount.value = count },
-      context.value
-    )) {
-      assistantMsg.content += chunk
-      await scrollToBottom()
-    }
-  } finally {
-    isLoading.value = false
-  }
+      context.value, selectedPersona.value,
+      (reason) => { reasons.value.push(reason) }
+    )) { assistantMsg.content += chunk; await scrollToBottom() }
+  } finally { isLoading.value = false }
 }
 
 async function sendMessage() {
   if (!input.value.trim() || isLoading.value) return
-
   const userMsg = input.value.trim()
   input.value = ""
   messages.value.push({ role: "user", content: userMsg })
   isLoading.value = true
-
   const assistantMsg = { role: "assistant" as const, content: "" }
   messages.value.push(assistantMsg)
   await scrollToBottom()
-
   try {
     for await (const chunk of streamChat(
-      userMsg, SESSION_ID, USER_ID,
+      userMsg,
+      SESSION_ID,
+      USER_ID,
       (count) => { reasonCount.value = count }
     )) {
       assistantMsg.content += chunk
@@ -204,12 +224,12 @@ async function sendMessage() {
 async function handleSummary() {
   isSummarizing.value = true
   conclusion.value = ""
-
+  reasonsHighlighted.value = []
   try {
     for await (const chunk of streamSummary(SESSION_ID, USER_ID)) {
       conclusion.value += chunk
     }
-    saveRecord(conclusion.value, messages.value, context.value)
+    saveRecord(conclusion.value)
     step.value = 3
   } finally {
     isSummarizing.value = false
@@ -219,13 +239,15 @@ async function handleSummary() {
 async function devSkipToSummary() {
   const data = await seedTestSession(SESSION_ID)
   reasonCount.value = data.reasons_count
+  reasons.value = ["발표 준비가 부족했다", "자신감이 없었다", "잠을 못 잤다", "피드백이 두려웠다", "실패가 무서웠다"]
+  context.value = "오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
   messages.value = [
-    { role: "user", content: "오늘 발표가 있었는데 엄청 떨렸어." },
+    { role: "user",      content: "오늘 발표가 있었는데 엄청 떨렸어." },
     { role: "assistant", content: "많이 떨리셨군요. 왜 그렇게 떨렸던 것 같아요?" },
-    { role: "user", content: "모르겠어. 그냥 자신이 없었나봐." },
-    { role: "assistant", content: `이유 ${data.reasons_count}개가 쌓였어요. 요약하기 버튼을 눌러보세요.` },
+    { role: "user",      content: "모르겠어. 그냥 자신이 없었나봐." },
+    { role: "assistant", content: "이유들이 쌓였어요. 요약하기 버튼을 눌러보세요." },
   ]
-  step.value = 2
+  navigate('chat')
 }
 
 function goHome() {
@@ -234,13 +256,10 @@ function goHome() {
 }
 
 function restart() {
-  step.value = 1
-  freeInput.value = ""
-  input.value = ""
-  messages.value = []
-  reasonCount.value = 0
-  conclusion.value = ""
-  context.value = ""
+  freeInput.value = ""; input.value = ""; messages.value = []
+  reasonCount.value = 0; reasons.value = []; conclusion.value = ""; reasonsHighlighted.value = []
+  context.value = ""; selectedPersona.value = "warm"
+  navigate('input')
 }
 </script>
 
@@ -253,61 +272,53 @@ function restart() {
   margin: 0 auto;
   padding: 0 28px;
   background: #f7f3ee;
+  font-size: 15px;
 }
 
 /* ── Header ── */
 .chat-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 0 20px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 0 18px;
   border-bottom: 1px solid #e8e0d8;
   flex-shrink: 0;
 }
 
-.logo {
-  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', 'STSong', '华文宋体', 'SimSun', serif;
-  font-size: 20px;
-  font-weight: 500;
-  color: #2c1f14;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  user-select: none;
-  transition: opacity 0.2s;
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0;
+  border-bottom: 1px solid #e8e0d8;
 }
-.logo:hover { opacity: 0.55; }
+
+.chat-header h1 {
+  font-size: 19px;
+  font-weight: 600;
+  color: #2c1f14;
+  letter-spacing: 0.02em;
+}
 
 .step-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
 }
 
-.step-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #e8e0d8;
-  color: #c0b0a4;
-  font-size: 11px;
-  font-weight: 600;
+.step-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all 0.35s ease;
-}
-.step-dot.active { background: #6b4c2a; color: #fffdf9; }
-.step-dot.done   { background: #b8a898; color: #fffdf9; }
-
-.step-line {
-  width: 18px;
-  height: 1px;
-  background: #e0d6cc;
-  transition: background 0.35s ease;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
 }
 .step-line.done { background: #b8a898; }
 
-.header-actions {
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -317,11 +328,35 @@ function restart() {
   background: none;
   border: 1px solid #e0d6cc;
   border-radius: 6px;
-  padding: 5px 12px;
+  padding: 4px 10px;
   font-size: 12px;
-  color: #a89080;
-  cursor: pointer;
-  transition: all 0.2s;
+  color: #b0a090;
+  letter-spacing: 0.02em;
+  transition: all 0.3s;
+}
+
+.step-item.active .step-num {
+  background: #6b4c2a;
+  color: #fffdf9;
+}
+.step-item.active .step-label { color: #6b4c2a; font-weight: 600; }
+
+.step-item.done .step-num { background: #c8a878; color: #fffdf9; }
+.step-item.done .step-label { color: #a89080; }
+
+.step-line {
+  flex: 1;
+  height: 1px;
+  background: #e0d6cc;
+  margin: 0 10px;
+  min-width: 32px;
+  transition: background 0.3s;
+}
+.step-line.done { background: #c8a878; }
+
+.records-open-btn {
+  background: none; border: 1px solid #e0d6cc; border-radius: 6px;
+  padding: 4px 12px; font-size: 13px; color: #a89080; cursor: pointer; transition: all 0.2s;
 }
 .records-open-btn:hover { background: #f0e8e0; color: #6b4c2a; }
 
@@ -332,85 +367,55 @@ function restart() {
   padding: 3px 7px;
   font-size: 14px;
   cursor: pointer;
-  opacity: 0.4;
+  opacity: 0.5;
   transition: opacity 0.2s;
 }
 .dev-btn:hover { opacity: 1; }
 
-/* ── Step wrapper: 고정 크기 ── */
-.step-wrapper {
+.step { color: #c8bdb5; }
+.step.active { color: #6b4c2a; font-weight: 600; }
+.step.done { color: #a89080; }
+.divider { color: #ddd4cc; }
+
+/* ── STEP 1 ── */
+.step1 {
   flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-.step-enter-active { transition: opacity 0.32s ease, transform 0.32s ease; }
-.step-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.step-enter-from   { opacity: 0; transform: translateY(14px); }
-.step-leave-to     { opacity: 0; transform: translateY(-8px); }
-
-/* 모든 스텝이 wrapper를 꽉 채움 */
-.step1, .step2, .step3 {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
-}
-
-/* ── STEP 1: 일기장 ── */
-.step1 {
   justify-content: center;
-  gap: 14px;
-  padding: 32px 0;
-}
-
-.journal-date {
-  font-size: 11px;
-  color: #b0a090;
-  letter-spacing: 0.1em;
-  font-family: 'Courier New', monospace;
+  gap: 18px;
+  padding: 40px 0;
 }
 
 .step1-desc {
   font-size: 15px;
   color: #7a6555;
-  line-height: 1.9;
+  line-height: 1.8;
 }
 
-.journal-textarea {
-  flex: 1;
+.step1 textarea {
   width: 100%;
-  padding: 20px 20px 20px;
+  padding: 18px;
   border: 1px solid #e0d6cc;
   border-radius: 14px;
   font-size: 14px;
-  line-height: 28px;
+  line-height: 1.8;
   resize: none;
   outline: none;
+  background: #fffdf9;
   color: #2c1f14;
   font-family: inherit;
-  box-sizing: border-box;
-  /* 줄 노트 질감 */
-  background-color: #fffef8;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent,
-    transparent 27px,
-    #ede8df 27px,
-    #ede8df 28px
-  );
-  background-position: 0 20px;
-  box-shadow: 0 2px 8px rgba(107,76,42,0.07);
+  box-shadow: 0 1px 4px rgba(107,76,42,0.06);
 }
 
-.journal-textarea:focus {
-  border-color: #b89070;
-  box-shadow: 0 0 0 3px rgba(160,120,80,0.09), 0 2px 8px rgba(107,76,42,0.07);
+.step1 textarea:focus {
+  border-color: #a07850;
+  box-shadow: 0 0 0 3px rgba(160,120,80,0.08);
 }
 
 .start-btn {
   align-self: flex-end;
-  padding: 12px 28px;
+  padding: 12px 26px;
   background: #6b4c2a;
   color: #fffdf9;
   border: none;
@@ -419,91 +424,88 @@ function restart() {
   cursor: pointer;
   transition: background 0.2s;
 }
-.start-btn:hover    { background: #5a3e22; }
+
+.start-btn:hover { background: #5a3e22; }
 .start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* ── STEP 2: 채팅 ── */
-.step2 { overflow: hidden; }
-
+/* ── STEP 2 ── */
 .messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 20px 0;
 }
 
 .message         { display: flex; justify-content: flex-start; }
 .message.user    { justify-content: flex-end; }
 
 .bubble {
-  max-width: 72%;
+  max-width: 75%;
   padding: 12px 16px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.7;
-  text-align: left;
 }
 
-.bubble :deep(p)          { margin: 0 0 6px 0; }
+.bubble :deep(p) { margin: 0 0 6px 0; }
 .bubble :deep(p:last-child) { margin-bottom: 0; }
 
 .message.assistant .bubble {
-  background: #fffdf9;
-  border: 1px solid #e8e0d8;
-  color: #2c1f14;
-  border-radius: 4px 16px 16px 16px;
-  box-shadow: 0 1px 3px rgba(107,76,42,0.06);
+  background: #fffdf9; border: 1px solid #e8e0d8; color: #2c1f14;
+  border-radius: 4px 16px 16px 16px; box-shadow: 0 1px 3px rgba(107,76,42,0.06);
 }
-
 .message.user .bubble {
-  background: #6b4c2a;
-  color: #fffdf9;
-  border-radius: 16px 16px 4px 16px;
-  white-space: pre-wrap;
+  background: #6b4c2a; color: #fffdf9;
+  border-radius: 16px 16px 4px 16px; white-space: pre-wrap;
 }
 
 .loading { color: #c8b8a8; animation: pulse 1.2s infinite; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.3; }
+  50% { opacity: 0.3; }
 }
 
-.reason-counter {
+.bottom-bar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   padding: 10px 0;
   border-top: 1px solid #e8e0d8;
   flex-shrink: 0;
 }
 
-.dots           { display: flex; gap: 5px; }
-.dot            { width: 7px; height: 7px; border-radius: 50%; background: #ddd4cc; transition: background 0.3s; }
-.dot.filled     { background: #6b4c2a; }
-.count-label    { font-size: 12px; color: #a89080; flex: 1; }
+.dots { display: flex; gap: 5px; }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ddd4cc;
+  transition: background 0.3s;
+}
+
+.dot.filled { background: #6b4c2a; }
+
+.count-label { font-size: 12px; color: #a89080; flex: 1; }
 
 .summary-btn {
-  padding: 8px 16px;
-  background: #6b4c2a;
-  color: #fffdf9;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
+  padding: 6px 16px; background: transparent; color: #a89080;
+  border: 1px solid #e0d6cc; border-radius: 8px; font-size: 13px;
+  cursor: pointer; transition: all 0.2s;
 }
-.summary-btn:hover    { background: #5a3e22; }
+
+.summary-btn:hover { background: #5a3e22; }
 .summary-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .input-area {
   display: flex;
   gap: 8px;
   padding: 10px 0 22px;
-  flex-shrink: 0;
 }
-
 .input-area textarea {
   flex: 1;
   padding: 12px 16px;
@@ -516,26 +518,26 @@ function restart() {
   font-family: inherit;
   resize: none;
   line-height: 1.6;
-  transition: border-color 0.2s;
 }
-.input-area textarea:focus { border-color: #a07850; box-shadow: 0 0 0 3px rgba(160,120,80,0.08); }
+
+.input-area textarea:focus {
+  border-color: #a07850;
+  box-shadow: 0 0 0 3px rgba(160,120,80,0.08);
+}
 
 .input-area button {
-  padding: 12px 20px;
-  background: #6b4c2a;
-  color: #fffdf9;
-  border: none;
-  border-radius: 12px;
-  font-size: 14px;
-  cursor: pointer;
-  align-self: flex-end;
-  transition: background 0.2s;
+  padding: 12px 20px; background: #6b4c2a; color: #fffdf9; border: none;
+  border-radius: 12px; font-size: 15px; cursor: pointer; align-self: flex-end; transition: background 0.2s;
 }
-.input-area button:hover    { background: #5a3e22; }
+
+.input-area button:hover { background: #5a3e22; }
 .input-area button:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* ── STEP 3: 결론 노트 ── */
+/* ── STEP 3 ── */
 .step3 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 28px;
@@ -545,35 +547,58 @@ function restart() {
 .note-card {
   width: 100%;
   max-width: 420px;
+  background: #fffef5;
   border-radius: 4px;
   padding: 36px 40px 40px;
   box-shadow:
     0 2px 4px rgba(107,76,42,0.08),
-    0 8px 24px rgba(107,76,42,0.12),
-    4px 4px 0 #e0d4c4;
-  background-color: #fffef5;
+    0 8px 24px rgba(107,76,42,0.10),
+    4px 4px 0 #e8ddd0;
+  position: relative;
+  /* 노트 줄 배경 */
   background-image: repeating-linear-gradient(
-    to bottom, transparent, transparent 31px, #ede8e0 31px, #ede8e0 32px
+    to bottom,
+    transparent,
+    transparent 31px,
+    #ede8e0 31px,
+    #ede8e0 32px
   );
   background-position: 0 52px;
 }
 
 .note-date {
-  font-size: 11px;
-  color: #b0a090;
-  letter-spacing: 0.08em;
-  margin-bottom: 20px;
-  font-family: 'Courier New', monospace;
+  font-size: 11px; color: #b0a090; letter-spacing: 0.08em;
+  margin-bottom: 20px; font-family: 'Courier New', monospace;
 }
 
-.note-lines { display: flex; flex-direction: column; }
+.note-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
 
-.note-line {
-  font-size: 15px;
-  color: #2c1f14;
-  line-height: 32px;
-  min-height: 32px;
-  letter-spacing: 0.01em;
+.note-reason-row {
+  display: flex; gap: 8px;
+  font-size: 14px; color: #5a4030; line-height: 1.6;
+}
+.note-star { color: #c8a878; flex-shrink: 0; }
+
+.note-reason-row :deep(mark) {
+  background: none;
+  font-weight: 700;
+  color: #6b4c2a;
+  border-bottom: 2px solid #c8a878;
+}
+
+.note-divider {
+  height: 1px;
+  background: linear-gradient(to right, #d4a97a, transparent);
+  margin: 4px 0 20px;
+}
+
+.note-conclusion {
+  font-size: 15px; color: #2c1f14; line-height: 1.8;
+  margin: 0; word-break: keep-all;
 }
 
 .note-footer {
@@ -582,12 +607,14 @@ function restart() {
   color: #c8b8a8;
   text-align: right;
   letter-spacing: 0.1em;
-  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', 'STSong', serif;
 }
 
-.step3-actions { display: flex; gap: 10px; }
+.step3-actions {
+  display: flex;
+  gap: 10px;
+}
 
-.back-btn, .restart-btn {
+.back-btn {
   padding: 10px 22px;
   background: transparent;
   color: #a89080;
@@ -597,5 +624,25 @@ function restart() {
   cursor: pointer;
   transition: all 0.2s;
 }
-.back-btn:hover, .restart-btn:hover { background: #f0e8e0; color: #6b4c2a; }
+
+.back-btn:hover {
+  background: #f0e8e0;
+  color: #6b4c2a;
+}
+
+.restart-btn {
+  padding: 10px 22px;
+  background: transparent;
+  color: #a89080;
+  border: 1px solid #e0d6cc;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.restart-btn:hover {
+  background: #f0e8e0;
+  color: #6b4c2a;
+}
 </style>

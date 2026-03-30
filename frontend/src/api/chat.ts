@@ -10,12 +10,14 @@ export async function* streamChat(
   sessionId: string,
   userId: string,
   onReasonCount: (count: number) => void,
-  context?: string
+  context?: string,
+  persona?: string,
+  onReasonSaved?: (reason: string) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId, user_id: userId, context }),
+    body: JSON.stringify({ message, session_id: sessionId, user_id: userId, context, persona }),
   })
 
   const reader = response.body!.getReader()
@@ -32,6 +34,10 @@ export async function* streamChat(
       const data = JSON.parse(line.slice(6))
       if (data.type === "text") yield data.content
       if (data.type === "done") onReasonCount(data.reason_count)
+      if (data.type === "tool_result" && data.tool === "save_reason") {
+        const result = JSON.parse(data.result)
+        onReasonSaved?.(result.saved)
+      }
     }
   }
 }
@@ -41,26 +47,14 @@ export async function seedTestSession(sessionId: string) {
   return res.json()
 }
 
-export async function* streamSummary(sessionId: string, userId: string) {
-  const response = await fetch(`${API_BASE}/api/summary`, {
+export async function fetchSummary(
+  sessionId: string,
+  userId: string
+): Promise<{ conclusion: string; reasons_highlighted: string[] }> {
+  const res = await fetch(`${API_BASE}/api/summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, user_id: userId }),
   })
-
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const chunk = decoder.decode(value)
-    const lines = chunk.split("\n").filter(l => l.startsWith("data: "))
-
-    for (const line of lines) {
-      const data = JSON.parse(line.slice(6))
-      if (data.type === "text") yield data.content
-    }
-  }
+  return res.json()
 }
