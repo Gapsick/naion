@@ -4,8 +4,10 @@
       <div class="header-top">
         <h1>内音</h1>
         <div class="header-actions">
+          <span class="header-nickname">{{ currentUser?.nickname }}</span>
           <button class="records-open-btn" @click="showRecords = true">기록</button>
           <button class="dev-btn" @click="devSkipToSummary" title="테스트">🧪</button>
+          <button class="logout-btn" @click="logout" title="로그아웃">↩</button>
         </div>
       </div>
       <div class="step-indicator">
@@ -26,7 +28,9 @@
       </div>
     </header>
 
-    <RecordsView v-if="showRecords" @close="showRecords = false" />
+    <Transition name="records-slide">
+      <RecordsView v-if="showRecords" @close="showRecords = false" />
+    </Transition>
 
     <div class="page-wrapper">
       <Transition :name="transitionName">
@@ -98,7 +102,7 @@
           <div class="input-area">
             <textarea
               v-model="input"
-              placeholder="생각나는 대로 말해보세요  (Shift+Enter 줄바꿈)"
+              placeholder="생각나는 대로 말해보세요"
               rows="1"
               ref="inputEl"
               @keydown.enter.exact.prevent="sendMessage"
@@ -142,12 +146,22 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from "vue"
 import { marked } from "marked"
+import { useRouter } from "vue-router"
 import { streamChat, fetchSummary, seedTestSession } from "../api/chat"
-import { saveRecord } from "../utils/records"
+import { getStoredUser, clearAuth } from "../api/auth"
 import RecordsView from "./RecordsView.vue"
 
+const router = useRouter()
+const currentUser = getStoredUser()
+if (!currentUser) router.push("/login")
+
 const SESSION_ID = "session-" + Date.now()
-const USER_ID = "demo-user"
+const USER_ID = currentUser?.id ?? "demo-user"
+
+function logout() {
+  clearAuth()
+  router.push("/login")
+}
 
 const personaOptions = [
   { id: "warm",    icon: "🌿", name: "따뜻한 코치",     description: "공감하며 부드럽게 이끌어요",       example: "\"많이 힘드셨겠어요. 왜 그런지 말해줄 수 있어요?\"" },
@@ -255,7 +269,6 @@ async function handleSummary() {
     const result = await fetchSummary(SESSION_ID, USER_ID)
     conclusion.value = result.conclusion
     reasonsHighlighted.value = result.reasons_highlighted
-    saveRecord(result.conclusion)
     navigate('summary')
   } finally { isSummarizing.value = false }
 }
@@ -286,10 +299,10 @@ function restart() {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-width: 680px;
+  height: 100dvh;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 0 28px;
+  padding: 0 16px;
   background: #f7f3ee;
   font-size: 15px;
 }
@@ -325,6 +338,16 @@ function restart() {
   padding: 3px 7px; font-size: 14px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s;
 }
 .dev-btn:hover { opacity: 1; }
+
+.header-nickname {
+  font-size: 12px; color: #b0a090; letter-spacing: 0.03em;
+}
+
+.logout-btn {
+  background: none; border: none; font-size: 15px; color: #c0b0a0;
+  cursor: pointer; padding: 2px 4px; transition: color 0.2s;
+}
+.logout-btn:hover { color: #6b4c2a; }
 
 /* 스텝 인디케이터 */
 .step-indicator { display: flex; align-items: center; }
@@ -379,8 +402,8 @@ function restart() {
 .step1 textarea:focus { border-color: #a07850; box-shadow: 0 0 0 3px rgba(160,120,80,0.08); }
 
 /* ── STEP 1.5 ── */
-.step-persona { justify-content: center; }
-.persona-page-inner { display: flex; flex-direction: column; gap: 20px; padding: 40px 0; }
+.step-persona { justify-content: flex-start; overflow-y: auto; }
+.persona-page-inner { display: flex; flex-direction: column; gap: 20px; padding: 24px 0 40px; }
 .persona-page-title { font-size: 20px; font-weight: 600; color: #2c1f14; }
 .persona-page-sub { font-size: 13px; color: #a89080; margin-top: -12px; }
 .persona-cards-full { display: flex; flex-direction: column; gap: 10px; }
@@ -411,7 +434,7 @@ function restart() {
 .message { display: flex; justify-content: flex-start; }
 .message.user { justify-content: flex-end; }
 
-.bubble { max-width: 75%; padding: 12px 16px; font-size: 15px; line-height: 1.7; }
+.bubble { max-width: 82%; padding: 12px 16px; font-size: 15px; line-height: 1.7; text-align: left; }
 .bubble :deep(p) { margin: 0 0 6px 0; }
 .bubble :deep(p:last-child) { margin-bottom: 0; }
 
@@ -465,15 +488,15 @@ function restart() {
 }
 
 .note-card {
-  width: 100%; max-width: 520px; background: #fffef5; border-radius: 4px;
-  padding: 32px 36px 40px 40px;
+  width: 100%; max-width: 600px; background: #fffef5; border-radius: 4px;
+  padding: 24px 24px 32px 24px;
   box-shadow: 0 2px 8px rgba(107,76,42,0.08), 0 12px 32px rgba(107,76,42,0.10);
   border-left: 3px solid #d4a97a;
 }
 
 .note-date { font-size: 11px; color: #b0a090; letter-spacing: 0.08em; margin-bottom: 20px; font-family: 'Courier New', monospace; }
 
-.note-context-text { font-size: 15px; color: #2c1f14; line-height: 1.8; margin: 0 0 16px; word-break: keep-all; }
+.note-context-text { font-size: 15px; color: #2c1f14; line-height: 1.8; margin: 0 0 16px; word-break: keep-all; text-align: left; }
 
 .note-reasons-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
 
@@ -491,6 +514,12 @@ function restart() {
 .note-footer { margin-top: 28px; font-size: 11px; color: #c8b8a8; text-align: right; letter-spacing: 0.1em; }
 
 .step3-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+/* ── 기록 패널 slide-up ── */
+.records-slide-enter-active { transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.records-slide-leave-active { transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
+.records-slide-enter-from   { opacity: 0; transform: translateY(100%); }
+.records-slide-leave-to     { opacity: 0; transform: translateY(100%); }
 
 /* ── 공통 버튼 ── */
 .start-btn {

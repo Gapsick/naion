@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from anthropic import AsyncAnthropic
 from models.schemas import SummaryRequest
 from services.agent_service import get_reasons_list
+from database import get_db
 
 router = APIRouter()
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -55,7 +56,19 @@ async def summary(req: SummaryRequest):
         raw = raw.strip()
 
     data = json.loads(raw)
+    conclusion = data.get("conclusion", "")
+    reasons_highlighted = data.get("reasons_highlighted", reasons)
+
+    # DB에 기록 저장
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO records (user_id, session_id, conclusion, reasons_highlighted) VALUES (?, ?, ?, ?)",
+        (req.user_id, req.session_id, conclusion, json.dumps(reasons_highlighted, ensure_ascii=False)),
+    )
+    conn.commit()
+    conn.close()
+
     return JSONResponse({
-        "conclusion": data.get("conclusion", ""),
-        "reasons_highlighted": data.get("reasons_highlighted", reasons),
+        "conclusion": conclusion,
+        "reasons_highlighted": reasons_highlighted,
     })

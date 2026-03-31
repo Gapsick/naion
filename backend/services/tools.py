@@ -25,19 +25,4 @@ TOOLS = [
             "required": []
         }
     },
-    {
-        "name": "find_keywords",
-        "description": "이유 목록에서 공통 키워드를 추출하고 결론 문장을 생성합니다. 이유가 5개 이상일 때만 호출하세요.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "reasons": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "분석할 이유 목록"
-                }
-            },
-            "required": ["reasons"]
-        }
-    }
 ]
