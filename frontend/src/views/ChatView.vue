@@ -224,9 +224,9 @@ async function scrollToBottom() {
 async function startChat() {
   navigate('chat')
   isLoading.value = true
-  const assistantMsg = { role: "assistant" as const, content: "" }
-  messages.value.push(assistantMsg)
+  messages.value.push({ role: "assistant" as const, content: "" })
   await scrollToBottom()
+  const idx = messages.value.length - 1
   try {
     for await (const chunk of streamChat(
       "방금 적은 내용을 바탕으로 질문해줘",
@@ -234,7 +234,7 @@ async function startChat() {
       (count) => { reasonCount.value = count },
       context.value, selectedPersona.value,
       (reason) => { reasons.value.push(reason) }
-    )) { assistantMsg.content += chunk; await scrollToBottom() }
+    )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally { isLoading.value = false }
 }
 
@@ -244,16 +244,16 @@ async function sendMessage() {
   input.value = ""
   messages.value.push({ role: "user", content: userMsg })
   isLoading.value = true
-  const assistantMsg = { role: "assistant" as const, content: "" }
-  messages.value.push(assistantMsg)
+  messages.value.push({ role: "assistant" as const, content: "" })
   await scrollToBottom()
+  const idx = messages.value.length - 1
   try {
     for await (const chunk of streamChat(
       userMsg, SESSION_ID, USER_ID,
       (count) => { reasonCount.value = count },
       undefined, selectedPersona.value,
       (reason) => { reasons.value.push(reason) }
-    )) { assistantMsg.content += chunk; await scrollToBottom() }
+    )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally {
     isLoading.value = false
     await nextTick()
