@@ -113,6 +113,15 @@
           </div>
         </div>
 
+        <!-- PAGE ERROR -->
+        <div v-else-if="page === 'error'" key="error" class="page error-page">
+          <div class="error-card">
+            <p class="error-title">문제가 발생했어요</p>
+            <p class="error-message">{{ errorMessage }}</p>
+            <button class="start-btn" @click="restart">처음으로 돌아가기</button>
+          </div>
+        </div>
+
         <!-- PAGE 3: まとめる -->
         <div v-else-if="page === 'summary'" key="summary" class="page step3">
           <div class="note-card">
@@ -155,7 +164,6 @@ const router = useRouter()
 const currentUser = getStoredUser()
 if (!currentUser) router.push("/login")
 
-const SESSION_ID = "session-" + Date.now()
 const USER_ID = currentUser?.id ?? "demo-user"
 
 function logout() {
@@ -169,7 +177,7 @@ const personaOptions = [
   { id: "coach",   icon: "💬", name: "소크라테스 코치", description: "질문으로만 스스로 답을 찾게 해요", example: "\"그 순간 무엇을 원하고 있었나요?\"" },
 ]
 
-type Page = 'input' | 'persona' | 'chat' | 'summary'
+type Page = 'input' | 'persona' | 'chat' | 'summary' | 'error'
 const pageOrder: Page[] = ['input', 'persona', 'chat', 'summary']
 
 const page           = ref<Page>('input')
@@ -177,9 +185,11 @@ const direction      = ref<'forward' | 'backward'>('forward')
 const transitionName = computed(() => `slide-${direction.value}`)
 const indicatorStep  = computed(() => {
   if (page.value === 'input' || page.value === 'persona') return 1
-  if (page.value === 'chat') return 2
+  if (page.value === 'chat' || page.value === 'error') return 2
   return 3
 })
+
+const errorMessage       = ref("")
 
 const freeInput          = ref("")
 const input              = ref("")
@@ -230,10 +240,11 @@ async function startChat() {
   try {
     for await (const chunk of streamChat(
       "방금 적은 내용을 바탕으로 질문해줘",
-      SESSION_ID, USER_ID,
+      USER_ID,
       (count) => { reasonCount.value = count },
       context.value, selectedPersona.value,
-      (reason) => { reasons.value.push(reason) }
+      (reason) => { reasons.value.push(reason) },
+      (msg) => { errorMessage.value = msg; page.value = 'error' }
     )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally { isLoading.value = false }
 }
@@ -249,10 +260,11 @@ async function sendMessage() {
   const idx = messages.value.length - 1
   try {
     for await (const chunk of streamChat(
-      userMsg, SESSION_ID, USER_ID,
+      userMsg, USER_ID,
       (count) => { reasonCount.value = count },
       undefined, selectedPersona.value,
-      (reason) => { reasons.value.push(reason) }
+      (reason) => { reasons.value.push(reason) },
+      (msg) => { errorMessage.value = msg; page.value = 'error' }
     )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally {
     isLoading.value = false
@@ -266,7 +278,7 @@ async function handleSummary() {
   conclusion.value = ""
   reasonsHighlighted.value = []
   try {
-    const result = await fetchSummary(SESSION_ID, USER_ID)
+    const result = await fetchSummary(USER_ID)
     conclusion.value = result.conclusion
     reasonsHighlighted.value = result.reasons_highlighted
     navigate('summary')
@@ -274,7 +286,7 @@ async function handleSummary() {
 }
 
 async function devSkipToSummary() {
-  const data = await seedTestSession(SESSION_ID)
+  const data = await seedTestSession(USER_ID)
   reasonCount.value = data.reasons_count
   reasons.value = ["발표 준비가 부족했다", "자신감이 없었다", "잠을 못 잤다", "피드백이 두려웠다", "실패가 무서웠다"]
   context.value = "오늘 발표가 있었는데 엄청 떨렸어. 준비는 했는데 왜인지 자신이 없었고..."
@@ -520,6 +532,12 @@ function restart() {
 .records-slide-leave-active { transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
 .records-slide-enter-from   { opacity: 0; transform: translateY(100%); }
 .records-slide-leave-to     { opacity: 0; transform: translateY(100%); }
+
+/* ── ERROR PAGE ── */
+.error-page { justify-content: center; align-items: center; }
+.error-card { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.error-title { font-size: 18px; font-weight: 600; color: #2c1f14; }
+.error-message { font-size: 13px; color: #a89080; }
 
 /* ── 공통 버튼 ── */
 .start-btn {

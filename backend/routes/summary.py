@@ -14,7 +14,7 @@ MODEL = "claude-sonnet-4-5-20250929"
 
 @router.post("")
 async def summary(req: SummaryRequest):
-    reasons = get_reasons_list(req.session_id)
+    reasons = get_reasons_list(req.user_id)
     if not reasons:
         return JSONResponse({"conclusion": "아직 저장된 이유가 없어요.", "reasons_highlighted": []})
 
@@ -63,7 +63,7 @@ async def summary(req: SummaryRequest):
     conn = get_db()
     conn.execute(
         "INSERT INTO records (user_id, session_id, conclusion, reasons_highlighted) VALUES (?, ?, ?, ?)",
-        (req.user_id, req.session_id, conclusion, json.dumps(reasons_highlighted, ensure_ascii=False)),
+        (req.user_id, req.user_id, conclusion, json.dumps(reasons_highlighted, ensure_ascii=False)),
     )
     conn.commit()
     conn.close()

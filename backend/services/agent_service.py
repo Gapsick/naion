@@ -3,6 +3,7 @@ import os
 from anthropic import AsyncAnthropic
 from .tools import TOOLS
 from .personas import get_system_prompt
+from .exceptions import ToolInputError, ToolExecutionError  # noqa: F401
 
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-haiku-4-5-20251001"
@@ -14,13 +15,18 @@ conversations: dict[str, list] = {}
 session_reasons: dict[str, list[str]] = {}
 
 
-def execute_tool(name: str, tool_input: dict, session_id: str) -> str:
+def execute_tool(name: str, tool_input: dict, user_id: str) -> str:
     if name == "save_reason":
-        reason = tool_input["reason"]
-        if session_id not in session_reasons:
-            session_reasons[session_id] = []
-        session_reasons[session_id].append(reason)
-        count = len(session_reasons[session_id])
+        try:
+            reason = str(tool_input["reason"])
+        except (KeyError, TypeError):
+            raise ToolInputError("reason 값이 없거나 잘못됨")
+        if not reason:
+            raise ToolInputError("reason이 빈 문자열")
+        if user_id not in session_reasons:
+            session_reasons[user_id] = []
+        session_reasons[user_id].append(reason)
+        count = len(session_reasons[user_id])
         return json.dumps({
             "saved": reason,
             "total_count": count,
@@ -28,21 +34,21 @@ def execute_tool(name: str, tool_input: dict, session_id: str) -> str:
         }, ensure_ascii=False)
 
     elif name == "get_reasons":
-        reasons = session_reasons.get(session_id, [])
+        reasons = session_reasons.get(user_id, [])
         return json.dumps({
             "reasons": reasons,
             "count": len(reasons),
         }, ensure_ascii=False)
 
-    return json.dumps({"error": f"Unknown tool: {name}"})
+    raise ToolInputError(f"알 수 없는 툴: {name}")
 
 
-def get_reasons_list(session_id: str) -> list[str]:
+def get_reasons_list(user_id: str) -> list[str]:
     """현재 세션에 저장된 이유 목록 반환 (summary route에서 사용)"""
-    return session_reasons.get(session_id, [])
+    return session_reasons.get(user_id, [])
 
 
-async def run_agent(message: str, session_id: str, user_id: str, persona: str, context: str | None = None):
+async def run_agent(message: str, user_id: str, persona: str, context: str | None = None):
     """
     Agent Loop — Claude가 tool_use를 반환하면 execute_tool()로 실행 후 재호출.
 
@@ -52,19 +58,19 @@ async def run_agent(message: str, session_id: str, user_id: str, persona: str, c
         tool_result : 툴 실행 결과 (save_reason → 프론트 카운트 업데이트)
         done        : 루프 종료 + 현재 이유 개수
     """
-    if session_id not in conversations:
-        conversations[session_id] = []
+    if user_id not in conversations:
+        conversations[user_id] = []
         if context:
-            conversations[session_id].append({
+            conversations[user_id].append({
                 "role": "user",
                 "content": f"[사용자가 자유롭게 적은 내용]\n{context}"
             })
-            conversations[session_id].append({
+            conversations[user_id].append({
                 "role": "assistant",
                 "content": "내용을 잘 읽었어요. 이걸 바탕으로 질문할게요."
             })
 
-    history = conversations[session_id]
+    history = conversations[user_id]
     history.append({"role": "user", "content": message})
 
     system_prompt = get_system_prompt(persona)
@@ -98,7 +104,15 @@ async def run_agent(message: str, session_id: str, user_id: str, persona: str, c
                 if block.type == "tool_use":
                     yield f"data: {json.dumps({'type': 'tool_call', 'tool': block.name, 'input': block.input})}\n\n"
 
-                    result = execute_tool(block.name, block.input, session_id)
+                    try:
+                        result = execute_tool(block.name, block.input, user_id)
+                    except ToolInputError as e:
+                        # Claude한테 에러 알려줌 → 재시도 유도
+                        result = json.dumps({"error": str(e)}, ensure_ascii=False)
+                    except ToolExecutionError as e:
+                        # 복구 불가 에러 → 프론트에 알리고 루프 종료
+                        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                        return
 
                     yield f"data: {json.dumps({'type': 'tool_result', 'tool': block.name, 'result': result})}\n\n"
 
@@ -110,5 +124,5 @@ async def run_agent(message: str, session_id: str, user_id: str, persona: str, c
 
             history.append({"role": "user", "content": tool_results})
 
-    reason_count = len(session_reasons.get(session_id, []))
+    reason_count = len(session_reasons.get(user_id, []))
     yield f"data: {json.dumps({'type': 'done', 'reason_count': reason_count})}\n\n"

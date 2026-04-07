@@ -7,17 +7,17 @@ export interface ChatMessage {
 
 export async function* streamChat(
   message: string,
-  sessionId: string,
   userId: string,
   onReasonCount: (count: number) => void,
   context?: string,
   persona?: string,
-  onReasonSaved?: (reason: string) => void
+  onReasonSaved?: (reason: string) => void,
+  onError?: (message: string) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId, user_id: userId, context, persona }),
+    body: JSON.stringify({ message, user_id: userId, context, persona }),
   })
 
   const reader = response.body!.getReader()
@@ -38,6 +38,7 @@ export async function* streamChat(
         const result = JSON.parse(data.result)
         onReasonSaved?.(result.saved)
       }
+      if (data.type === "error") onError?.(data.message)
     }
   }
 }
@@ -48,13 +49,12 @@ export async function seedTestSession(sessionId: string) {
 }
 
 export async function fetchSummary(
-  sessionId: string,
   userId: string
 ): Promise<{ conclusion: string; reasons_highlighted: string[] }> {
   const res = await fetch(`${API_BASE}/api/summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, user_id: userId }),
+    body: JSON.stringify({ user_id: userId }),
   })
   return res.json()
 }
