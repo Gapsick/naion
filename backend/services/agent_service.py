@@ -1,9 +1,12 @@
 import json
 import os
 from anthropic import AsyncAnthropic
+from tavily import AsyncTavilyClient
 from .tools import TOOLS
 from .personas import get_system_prompt
 from .exceptions import ToolInputError, ToolExecutionError  # noqa: F401
+
+tavily = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-haiku-4-5-20251001"
@@ -15,8 +18,25 @@ conversations: dict[str, list] = {}
 session_reasons: dict[str, list[str]] = {}
 
 
-def execute_tool(name: str, tool_input: dict, user_id: str) -> str:
-    if name == "save_reason":
+async def execute_tool(name: str, tool_input: dict, user_id: str) -> str:
+    if name == "web_search":
+        try:
+            query = str(tool_input["query"])
+        except (KeyError, TypeError):
+            raise ToolInputError("query 값이 없거나 잘못됨")
+        try:
+            result = await tavily.search(query, include_answer=True, max_results=3)
+            return json.dumps({
+                "answer": result.get("answer", ""),
+                "results": [
+                    {"title": r["title"], "content": r["content"]}
+                    for r in result.get("results", [])
+                ]
+            }, ensure_ascii=False)
+        except Exception as e:
+            raise ToolExecutionError(f"검색 실패: {e}")
+
+    elif name == "save_reason":
         try:
             reason = str(tool_input["reason"])
         except (KeyError, TypeError):
@@ -105,7 +125,7 @@ async def run_agent(message: str, user_id: str, persona: str, context: str | Non
                     yield f"data: {json.dumps({'type': 'tool_call', 'tool': block.name, 'input': block.input})}\n\n"
 
                     try:
-                        result = execute_tool(block.name, block.input, user_id)
+                        result = await execute_tool(block.name, block.input, user_id)
                     except ToolInputError as e:
                         # Claude한테 에러 알려줌 → 재시도 유도
                         result = json.dumps({"error": str(e)}, ensure_ascii=False)

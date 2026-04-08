@@ -244,7 +244,8 @@ async function startChat() {
       (count) => { reasonCount.value = count },
       context.value, selectedPersona.value,
       (reason) => { reasons.value.push(reason) },
-      (msg) => { errorMessage.value = msg; page.value = 'error' }
+      (msg) => { errorMessage.value = msg; page.value = 'error' },
+      () => { messages.value[idx].content = "" }
     )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally { isLoading.value = false }
 }
@@ -264,7 +265,8 @@ async function sendMessage() {
       (count) => { reasonCount.value = count },
       undefined, selectedPersona.value,
       (reason) => { reasons.value.push(reason) },
-      (msg) => { errorMessage.value = msg; page.value = 'error' }
+      (msg) => { errorMessage.value = msg; page.value = 'error' },
+      () => { messages.value[idx].content = "" }
     )) { messages.value[idx].content += chunk; await scrollToBottom() }
   } finally {
     isLoading.value = false

@@ -12,7 +12,8 @@ export async function* streamChat(
   context?: string,
   persona?: string,
   onReasonSaved?: (reason: string) => void,
-  onError?: (message: string) => void
+  onError?: (message: string) => void,
+  onToolCall?: () => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
@@ -39,6 +40,7 @@ export async function* streamChat(
         onReasonSaved?.(result.saved)
       }
       if (data.type === "error") onError?.(data.message)
+      if (data.type === "tool_call") onToolCall?.()
     }
   }
 }
