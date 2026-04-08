@@ -1,42 +1,52 @@
 import json
 import os
 from anthropic import AsyncAnthropic
-from tavily import AsyncTavilyClient
-from .tools import TOOLS
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+from .tools import NAION_TOOLS
 from .personas import get_system_prompt
-from .exceptions import ToolInputError, ToolExecutionError  # noqa: F401
+from .exceptions import ToolInputError, ToolExecutionError
 
-tavily = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8001/sse")
 
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-haiku-4-5-20251001"
 
-# 세션별 대화 히스토리 저장소 (인메모리)
+# 유저별 대화 히스토리 저장소 (인메모리)
 conversations: dict[str, list] = {}
 
-# 세션별 이유 저장소 (인메모리)
+# 유저별 이유 저장소 (인메모리)
 session_reasons: dict[str, list[str]] = {}
 
 
-async def execute_tool(name: str, tool_input: dict, user_id: str) -> str:
-    if name == "web_search":
-        try:
-            query = str(tool_input["query"])
-        except (KeyError, TypeError):
-            raise ToolInputError("query 값이 없거나 잘못됨")
-        try:
-            result = await tavily.search(query, include_answer=True, max_results=3)
-            return json.dumps({
-                "answer": result.get("answer", ""),
-                "results": [
-                    {"title": r["title"], "content": r["content"]}
-                    for r in result.get("results", [])
-                ]
-            }, ensure_ascii=False)
-        except Exception as e:
-            raise ToolExecutionError(f"검색 실패: {e}")
+async def get_mcp_tools() -> list:
+    """MCP 서버에서 툴 목록 가져오기"""
+    async with sse_client(MCP_SERVER_URL) as (read, write): # MCP <-> HTTP
+        async with ClientSession(read, write) as session:   # MCP Protocol
+            await session.initialize()                      # HandShake
+            tools_result = await session.list_tools()       
+            return [
+                {
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "input_schema": tool.inputSchema,
+                }
+                for tool in tools_result.tools
+            ]
 
-    elif name == "save_reason":
+
+async def call_mcp_tool(name: str, tool_input: dict) -> str:
+    """MCP 서버에 툴 실행 위임"""
+    async with sse_client(MCP_SERVER_URL) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(name, arguments=tool_input)    # ("web_search", {"query", : "..."})
+            return result.content[0].text if result.content else ""
+
+
+async def execute_tool(name: str, tool_input: dict, user_id: str) -> str:
+    """naion 내부 툴 실행 (save_reason, get_reasons)"""
+    if name == "save_reason":
         try:
             reason = str(tool_input["reason"])
         except (KeyError, TypeError):
@@ -70,12 +80,12 @@ def get_reasons_list(user_id: str) -> list[str]:
 
 async def run_agent(message: str, user_id: str, persona: str, context: str | None = None):
     """
-    Agent Loop — Claude가 tool_use를 반환하면 execute_tool()로 실행 후 재호출.
+    Agent Loop — Claude가 tool_use를 반환하면 툴 실행 후 재호출.
 
     SSE 이벤트:
         text        : Claude 텍스트 응답
         tool_call   : 툴 호출 중
-        tool_result : 툴 실행 결과 (save_reason → 프론트 카운트 업데이트)
+        tool_result : 툴 실행 결과
         done        : 루프 종료 + 현재 이유 개수
     """
     if user_id not in conversations:
@@ -96,12 +106,24 @@ async def run_agent(message: str, user_id: str, persona: str, context: str | Non
     system_prompt = get_system_prompt(persona)
     max_iterations = 10
 
+    # MCP 서버 툴 + naion 내부 툴 합치기
+    try:
+        mcp_tools = await get_mcp_tools()
+    except Exception:
+        mcp_tools = []  # MCP 서버 연결 실패해도 내부 툴로 계속 동작
+
+    all_tools = mcp_tools + NAION_TOOLS
+
+    # MCP 툴 이름 목록 (나중에 분기할 때 사용)
+    mcp_tool_names = {t["name"] for t in mcp_tools}
+
     for _ in range(max_iterations):
+        # Anthropic server request
         response = await client.messages.create(
             model=MODEL,
             max_tokens=1024,
             system=system_prompt,
-            tools=TOOLS,
+            tools=all_tools,
             messages=history,
         )
 
@@ -117,6 +139,8 @@ async def run_agent(message: str, user_id: str, persona: str, context: str | Non
             history.append({"role": "assistant", "content": response.content})
 
             tool_results = []
+            
+            # whats tool
             for block in response.content:
                 if block.type == "text" and block.text:
                     yield f"data: {json.dumps({'type': 'text', 'content': block.text})}\n\n"
@@ -125,12 +149,15 @@ async def run_agent(message: str, user_id: str, persona: str, context: str | Non
                     yield f"data: {json.dumps({'type': 'tool_call', 'tool': block.name, 'input': block.input})}\n\n"
 
                     try:
-                        result = await execute_tool(block.name, block.input, user_id)
+                        if block.name in mcp_tool_names:
+                            # MCP 서버에 위임
+                            result = await call_mcp_tool(block.name, block.input)
+                        else:
+                            # naion 내부 툴 실행
+                            result = await execute_tool(block.name, block.input, user_id)
                     except ToolInputError as e:
-                        # Claude한테 에러 알려줌 → 재시도 유도
                         result = json.dumps({"error": str(e)}, ensure_ascii=False)
                     except ToolExecutionError as e:
-                        # 복구 불가 에러 → 프론트에 알리고 루프 종료
                         yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
                         return
 

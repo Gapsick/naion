@@ -1,20 +1,4 @@
-TOOLS = [
-    {
-        "name": "web_search",
-        "description": """대화 중 모르는 고유명사(회사, 사람, 장소, 서비스 등)가 나오면 즉시 호출하세요.
-        예시: '오늘 donuts 면접 봤어' → web_search('donuts 회사')
-        검색 결과를 바탕으로 맥락을 파악한 뒤 질문하세요.""",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "검색어 (영어 또는 한국어)"
-                }
-            },
-            "required": ["query"]
-        }
-    },
+NAION_TOOLS = [
     {
         "name": "save_reason",
         "description": """사용자가 자신의 감정/상태의 이유를 말했을 때 즉시 호출하세요.
