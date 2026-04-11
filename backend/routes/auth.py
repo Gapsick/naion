@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from services.auth_service import (
-    register_user, login_user,
+    register_user, login_user, update_nickname,
     create_access_token, create_refresh_token, decode_token,
 )
 
@@ -50,6 +50,25 @@ def refresh(req: RefreshRequest):
         return {"access_token": create_access_token(payload["sub"])}
     except Exception:
         raise HTTPException(401, "토큰이 만료됐거나 유효하지 않아요.")
+
+
+class NicknameRequest(BaseModel):
+    nickname: str
+
+
+@router.patch("/nickname")
+def change_nickname(req: NicknameRequest, authorization: str = Header(...)):
+    try:
+        token = authorization.removeprefix("Bearer ")
+        payload = decode_token(token)
+        user_id = payload["sub"]
+    except Exception:
+        raise HTTPException(401, "인증이 필요해요.")
+
+    result = update_nickname(user_id, req.nickname.strip())
+    if not result:
+        raise HTTPException(400, "이미 사용 중인 닉네임이에요.")
+    return {"user": result}
 
 
 @router.get("/me")

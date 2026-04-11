@@ -35,3 +35,25 @@ def get_records(authorization: str = Header(...)):
         for row in rows
     ]
     return JSONResponse({"records": records})
+
+
+@router.delete("/{record_id}")
+def delete_record(record_id: int, authorization: str = Header(...)):
+    try:
+        token = authorization.removeprefix("Bearer ")
+        payload = decode_token(token)
+        user_id = payload["sub"]
+    except Exception:
+        raise HTTPException(401, "인증이 필요해요.")
+
+    conn = get_db()
+    result = conn.execute(
+        "DELETE FROM records WHERE id = ? AND user_id = ?",
+        (record_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+    if result.rowcount == 0:
+        raise HTTPException(404, "기록을 찾을 수 없어요.")
+    return JSONResponse({"ok": True})

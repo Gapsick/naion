@@ -56,6 +56,21 @@ def register_user(nickname: str, password: str) -> dict | None:
     return {"id": user_id, "nickname": nickname}
 
 
+def update_nickname(user_id: str, new_nickname: str) -> dict | None:
+    """닉네임 변경. 중복이면 None 반환."""
+    conn = get_db()
+    exists = conn.execute(
+        "SELECT id FROM users WHERE nickname = ? AND id != ?", (new_nickname, user_id)
+    ).fetchone()
+    if exists:
+        conn.close()
+        return None
+    conn.execute("UPDATE users SET nickname = ? WHERE id = ?", (new_nickname, user_id))
+    conn.commit()
+    conn.close()
+    return {"id": user_id, "nickname": new_nickname}
+
+
 def login_user(nickname: str, password: str) -> dict | None:
     """닉네임 + 비밀번호 검증. 실패하면 None 반환."""
     conn = get_db()

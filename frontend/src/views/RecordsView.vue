@@ -1,14 +1,24 @@
 <template>
-  <div class="records-overlay" @click.self="$emit('close')">
+  <div class="records-overlay" @click.self="emit('close')">
+    <ConfirmModal
+      :show="modal.show"
+      :message="modal.message"
+      :confirm-text="modal.confirmText"
+      @confirm="modal.onConfirm()"
+      @cancel="closeModal"
+    />
     <div class="records-panel">
       <Transition name="panel" mode="out-in">
 
         <!-- 상세 보기 -->
         <div v-if="selected" key="detail" class="detail-view">
           <div class="panel-header">
-            <button class="back-btn" @click="selected = null">← 뒤로</button>
+            <button class="back-btn" @click="selected = null">뒤로</button>
             <span class="panel-title">{{ formatDate(selected.created_at) }}</span>
-            <button class="close-btn" @click="$emit('close')">✕</button>
+            <div class="header-right">
+              <button class="delete-btn" @click="deleteRecord(selected.id)">삭제</button>
+              <button class="close-btn" @click="$emit('close')">✕</button>
+            </div>
           </div>
           <div class="detail-scroll">
             <div class="detail-section">
@@ -43,7 +53,7 @@
             <p class="empty-sub">대화를 마치면 여기에 쌓여요.</p>
           </div>
 
-          <div v-else>
+          <div v-else class="scroll-area">
             <div v-if="months.length > 1" class="month-filters">
               <button
                 v-for="m in months"
@@ -77,10 +87,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue"
 import { getAccessToken, refreshAccessToken } from "../api/auth"
+import ConfirmModal from "../components/ConfirmModal.vue"
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
-defineEmits(["close"])
+const emit = defineEmits(["close"])
+
 
 interface Record {
   id: number
@@ -91,6 +103,12 @@ interface Record {
 
 const records      = ref<Record[]>([])
 const loading      = ref(true)
+const modal        = ref({ show: false, message: "", confirmText: "확인", onConfirm: () => {} })
+
+function showConfirm(message: string, confirmText: string, onConfirm: () => void) {
+  modal.value = { show: true, message, confirmText, onConfirm }
+}
+function closeModal() { modal.value.show = false }
 const selectedMonth = ref<string | null>(null)
 const selected     = ref<Record | null>(null)
 const rotations    = ["-2deg", "1.5deg", "-1deg", "2.5deg", "-1.5deg", "1deg"]
@@ -131,12 +149,26 @@ async function fetchRecords() {
   }
 }
 
+function deleteRecord(id: number) {
+  showConfirm("이 기록을 삭제할까요?", "삭제", async () => {
+    closeModal()
+    const token = getAccessToken()
+    await fetch(`${API_BASE}/api/records/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    records.value = records.value.filter(r => r.id !== id)
+    selected.value = null
+    if (records.value.length === 0) emit('close')
+  })
+}
+
 onMounted(fetchRecords)
 </script>
 
 <style scoped>
 .records-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(44, 31, 20, 0.38);
   z-index: 100;
@@ -149,7 +181,7 @@ onMounted(fetchRecords)
 .records-panel {
   width: 100%;
   max-width: 680px;
-  max-height: 88vh;
+  height: 88%;
   background: #f7f3ee;
   border-radius: 20px 20px 0 0;
   overflow: hidden;
@@ -166,8 +198,13 @@ onMounted(fetchRecords)
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
-  max-height: 88vh;
+  min-height: 0;
+}
+
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel-header {
@@ -177,15 +214,28 @@ onMounted(fetchRecords)
   padding: 20px 24px 16px;
   border-bottom: 1px solid #e8e0d8;
   flex-shrink: 0;
+  position: relative;
 }
 
-.panel-title { font-size: 15px; font-weight: 600; color: #2c1f14; }
+.panel-title {
+  font-size: 15px; font-weight: 600; color: #2c1f14;
+  position: absolute; left: 50%; transform: translateX(-50%);
+}
 
 .back-btn {
   font-size: 13px; color: #a89080; background: none;
   border: none; cursor: pointer; padding: 4px 0; transition: color 0.2s;
 }
 .back-btn:hover { color: #6b4c2a; }
+
+.header-right { display: flex; align-items: center; gap: 8px; }
+
+.delete-btn {
+  font-size: 12px; color: #c07060; background: none;
+  border: 1px solid #e0ccc8; border-radius: 6px;
+  padding: 3px 10px; cursor: pointer; transition: all 0.2s;
+}
+.delete-btn:hover { background: #fdf0ee; border-color: #c07060; }
 
 .close-btn {
   background: none; border: none; font-size: 16px;
@@ -211,7 +261,7 @@ onMounted(fetchRecords)
 
 .cards {
   display: grid; grid-template-columns: repeat(2, 1fr);
-  gap: 24px; padding: 20px 24px 40px; overflow-y: auto;
+  gap: 24px; padding: 20px 24px 40px;
 }
 
 .memo-card {
